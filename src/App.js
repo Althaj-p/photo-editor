@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Camera, Grid, Edit3, Crop, Printer, RotateCcw, Download, Folder } from 'lucide-react';
+import { Camera, Grid, Edit3, Crop, Printer, RotateCcw, Download, Folder, Wand2, Image as ImageIcon, Save } from 'lucide-react';
 // Automatically import all images from src/assets/images
 const importAll = (r) => {
   return r.keys().map((file, index) => ({
@@ -79,12 +79,51 @@ const PhotoEditor = () => {
   const [isDragging, setIsDragging] = useState(false);
   const [dragType, setDragType] = useState(null);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0, width: 0, height: 0 });
+  const [isRemovingBg, setIsRemovingBg] = useState(false);
+  const [bgRemoveProgress, setBgRemoveProgress] = useState(0);
+  const [bgRemoveStatus, setBgRemoveStatus] = useState('');
+  const [bgRemovedImage, setBgRemovedImage] = useState(null);
+  const [showBackgrounds, setShowBackgrounds] = useState(false);
+  const [selectedBackground, setSelectedBackground] = useState(null);
+  const [compositeImage, setCompositeImage] = useState(null);
   
   const canvasRef = useRef(null);
   const originalImageRef = useRef(null);
   const cropCanvasRef = useRef(null);
   const imageContainerRef = useRef(null);
-
+  // Sample background images
+  const backgroundImages = [
+    {
+      id: 1,
+      name: 'Beach',
+      url: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=800&q=80'
+    },
+    {
+      id: 2,
+      name: 'Mountain',
+      url: 'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=800&q=80'
+    },
+    {
+      id: 3,
+      name: 'City',
+      url: 'https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=800&q=80'
+    },
+    {
+      id: 4,
+      name: 'Studio',
+      url: 'https://images.unsplash.com/photo-1533575770077-052fa2c609fc?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=800&q=80'
+    },
+    {
+      id: 5,
+      name: 'Gradient',
+      url: 'https://images.unsplash.com/photo-1579546929662-711aa81148cf?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=800&q=80'
+    },
+    {
+      id: 6,
+      name: 'Nature',
+      url: 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=800&q=80'
+    }
+  ];
   const aspectRatios = [
     { label: 'Free', value: 'free' },
     { label: '1:1', value: '1:1' },
@@ -93,6 +132,238 @@ const PhotoEditor = () => {
     { label: '3:2', value: '3:2' },
     { label: '5:4', value: '5:4' }
   ];
+
+   // PicWash API integration
+// PicWash API integration
+  const removeBackground = async () => {
+    if (!selectedImage) return;
+    
+    setIsRemovingBg(true);
+    setBgRemoveProgress(0);
+    setBgRemoveStatus('Initializing background removal...');
+    
+    try {
+      // Create FormData for the API request
+      const formData = new FormData();
+      
+      // Fetch the image and convert to blob
+      const response = await fetch(selectedImage.url);
+      const blob = await response.blob();
+      
+      formData.append('image_file', blob);
+      formData.append('sync', '0'); // Async processing
+      formData.append('return_type', '1'); // Return image URL
+      formData.append('output_type', '2'); // Return the image only
+      formData.append('format', 'png'); // PNG format with transparency
+      
+      // Create the task
+      const createTaskResponse = await fetch('https://techhk.aoscdn.com/api/tasks/visual/segmentation', {
+        method: 'POST',
+        headers: {
+          'X-API-KEY': 'wxa8nbct595p2r0x5',
+        },
+        body: formData
+      });
+      
+      if (!createTaskResponse.ok) {
+        throw new Error(`API error: ${createTaskResponse.status}`);
+      }
+      
+      const taskData = await createTaskResponse.json();
+      
+      if (taskData.status !== 200) {
+        throw new Error(`API error: ${taskData.message}`);
+      }
+      
+      const taskId = taskData.data.task_id;
+      setBgRemoveStatus('Processing image...');
+      
+      // Poll for results with timeout (30 seconds max)
+      const maxAttempts = 30;
+      let attempts = 0;
+      
+      const pollForResult = async () => {
+        attempts++;
+        setBgRemoveProgress((attempts / maxAttempts) * 100);
+        
+        try {
+          const resultResponse = await fetch(`https://techhk.aoscdn.com/api/tasks/visual/segmentation/${taskId}`, {
+            headers: {
+              'X-API-KEY': 'wxa8nbct595p2r0x5',
+            }
+          });
+          
+          if (!resultResponse.ok) {
+            throw new Error(`API error: ${resultResponse.status}`);
+          }
+          
+          const resultData = await resultResponse.json();
+          
+          if (resultData.status === 200) {
+            if (resultData.data.state === 1) { // Task completed
+              setBgRemoveStatus('Background removed successfully!');
+              
+              // Store the background-removed image
+              const processedImageUrl = resultData.data.image;
+              setBgRemovedImage({
+                url: processedImageUrl,
+                name: `no-bg-${selectedImage.name}`
+              });
+              
+              // Update the displayed image
+              setSelectedImage(prev => ({ 
+                ...prev, 
+                url: processedImageUrl 
+              }));
+              
+              // Also update the original image reference for further editing
+              const newImg = new Image();
+              newImg.onload = () => {
+                originalImageRef.current = newImg;
+                setIsRemovingBg(false);
+                
+                // Auto-save the background-removed image
+                saveBgRemovedImage(processedImageUrl);
+              };
+              newImg.src = processedImageUrl;
+              
+              return true;
+            } else if (resultData.data.state < 0) { // Task failed
+              throw new Error(`Background removal failed: ${resultData.message}`);
+            }
+          }
+          
+          // If not completed and not failed, continue polling
+          if (attempts < maxAttempts) {
+            setTimeout(pollForResult, 1000);
+          } else {
+            throw new Error('Background removal timed out');
+          }
+        } catch (error) {
+          console.error('Error polling for result:', error);
+          setBgRemoveStatus(`Error: ${error.message}`);
+          setTimeout(() => setIsRemovingBg(false), 3000);
+        }
+      };
+      
+      // Start polling
+      setTimeout(pollForResult, 1000);
+      
+    } catch (error) {
+      console.error('Error removing background:', error);
+      setBgRemoveStatus(`Error: ${error.message}`);
+      setTimeout(() => setIsRemovingBg(false), 3000);
+    }
+  };
+
+  // Save background removed image
+  const saveBgRemovedImage = (imageUrl) => {
+    if (!imageUrl) return;
+    
+    try {
+      // Create a download link
+      const link = document.createElement('a');
+      link.download = `no-bg-${selectedImage.name}`;
+      link.href = imageUrl;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      // In a real Electron app, you would use the file system API here
+      console.log('Background removed image saved');
+    } catch (error) {
+      console.error('Error saving image:', error);
+    }
+  };
+
+  // Apply selected background
+  const applyBackground = async (background) => {
+    if (!bgRemovedImage) return;
+    
+    setSelectedBackground(background);
+    
+    // Create a canvas to composite the images
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    
+    // Load both images
+    const foreground = new Image();
+    const backgroundImg = new Image();
+    
+    foreground.crossOrigin = 'anonymous';
+    backgroundImg.crossOrigin = 'anonymous';
+    
+    // Wait for both images to load
+    await new Promise((resolve) => {
+      let loaded = 0;
+      const onLoad = () => {
+        loaded++;
+        if (loaded === 2) resolve();
+      };
+      
+      foreground.onload = onLoad;
+      backgroundImg.onload = onLoad;
+      
+      foreground.src = bgRemovedImage.url;
+      backgroundImg.src = background.url;
+    });
+    
+    // Set canvas dimensions to match background
+    canvas.width = backgroundImg.width;
+    canvas.height = backgroundImg.height;
+    
+    // Draw background
+    ctx.drawImage(backgroundImg, 0, 0, canvas.width, canvas.height);
+    
+    // Calculate dimensions for foreground to fit nicely
+    const maxWidth = canvas.width * 0.8;
+    const maxHeight = canvas.height * 0.8;
+    
+    let fgWidth = foreground.width;
+    let fgHeight = foreground.height;
+    
+    // Scale if necessary
+    if (fgWidth > maxWidth) {
+      const ratio = maxWidth / fgWidth;
+      fgWidth = maxWidth;
+      fgHeight = fgHeight * ratio;
+    }
+    
+    if (fgHeight > maxHeight) {
+      const ratio = maxHeight / fgHeight;
+      fgHeight = maxHeight;
+      fgWidth = fgWidth * ratio;
+    }
+    
+    // Center the foreground image
+    const x = (canvas.width - fgWidth) / 2;
+    const y = (canvas.height - fgHeight) / 2;
+    
+    // Draw foreground
+    ctx.drawImage(foreground, x, y, fgWidth, fgHeight);
+    
+    // Convert to data URL
+    const compositeUrl = canvas.toDataURL('image/png');
+    setCompositeImage(compositeUrl);
+    
+    // Update the displayed image
+    setSelectedImage(prev => ({ 
+      ...prev, 
+      url: compositeUrl 
+    }));
+  };
+
+  // Save composite image
+  const saveCompositeImage = () => {
+    if (!compositeImage) return;
+    
+    const link = document.createElement('a');
+    link.download = `composite-${selectedImage.name}`;
+    link.href = compositeImage;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   // Apply filters to the selected image
   const applyFilters = () => {
@@ -423,6 +694,35 @@ const PhotoEditor = () => {
           {selectedImage && (
             <div className="navbar-controls">
               <button
+                onClick={removeBackground}
+                className={`control-button ${isRemovingBg ? 'control-button-active' : ''}`}
+                disabled={isRemovingBg}
+              >
+                <Wand2 className="control-icon" />
+                {isRemovingBg ? 'Removing...' : 'Remove BG'}
+              </button>
+              {/* Add Backgrounds button */}
+              {bgRemovedImage && (
+                <button
+                  onClick={() => setShowBackgrounds(!showBackgrounds)}
+                  className={`control-button ${showBackgrounds ? 'control-button-active' : ''}`}
+                >
+                  <ImageIcon className="control-icon" />
+                  Backgrounds
+                </button>
+              )}
+              
+              {/* Add Save Composite button */}
+              {compositeImage && (
+                <button
+                  onClick={saveCompositeImage}
+                  className="control-button save-button"
+                >
+                  <Save className="control-icon" />
+                  Save Composite
+                </button>
+              )}
+              <button
                 onClick={() => {
                   setIsCropping(!isCropping);
                   setIsEditing(false);
@@ -468,6 +768,28 @@ const PhotoEditor = () => {
         </div>
 
         <div className="editor-area">
+          {/* Background Selection Panel */}
+          {showBackgrounds && (
+            <div className="backgrounds-panel">
+              <h3 className="panel-title">
+                <ImageIcon className="panel-icon" />
+                Select Background
+              </h3>
+              
+              <div className="backgrounds-grid">
+                {backgroundImages.map(bg => (
+                  <div
+                    key={bg.id}
+                    className={`background-item ${selectedBackground?.id === bg.id ? 'background-item-active' : ''}`}
+                    onClick={() => applyBackground(bg)}
+                  >
+                    <img src={bg.url} alt={bg.name} />
+                    <span>{bg.name}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           {/* Image Grid */}
           <div className="image-grid-container">
             {activeTab === 'all-photos' && !selectedImage && (
@@ -506,6 +828,20 @@ const PhotoEditor = () => {
                   className="image-container"
                   ref={imageContainerRef}
                 >
+                  {/* Background removal progress overlay */}
+                {isRemovingBg && (
+                  <div className="bg-remove-overlay">
+                    <div className="bg-remove-progress">
+                      <div className="progress-bar">
+                        <div 
+                          className="progress-fill" 
+                          style={{ width: `${bgRemoveProgress}%` }}
+                        ></div>
+                      </div>
+                      <p className="progress-status">{bgRemoveStatus}</p>
+                    </div>
+                  </div>
+                )}
                   <img
                     ref={originalImageRef}
                     src={selectedImage.url}
