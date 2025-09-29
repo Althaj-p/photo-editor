@@ -230,7 +230,11 @@ const loadImagesFromFolder = async () => {
    // PicWash API integration
 // PicWash API integration
   const removeBackground = async () => {
-    if (!selectedImage) return;
+    if (!selectedImage || !selectedImage.url) { // Add null check
+      console.error('No image selected or image URL is invalid');
+      return;
+    }
+    // if (!selectedImage) return;
     setOriginalImage(selectedImage);
     
     setIsRemovingBg(true);
@@ -373,7 +377,11 @@ const loadImagesFromFolder = async () => {
 
   // Apply selected background
   const applyBackground = async (background) => {
-    if (!bgRemovedImage) return;
+    if (!bgRemovedImage || !bgRemovedImage.url || !background || !background.url) {
+      console.error('Invalid background application');
+      return;
+    }
+    // if (!bgRemovedImage) return;
     
     setSelectedBackground(background);
     
@@ -775,6 +783,34 @@ const selectImageFromComparison = (image, type) => {
   };
   newImg.src = image.url;
 };
+
+const selectImageFromComparison2 = (image, type) => {
+  if (!selectedImage || !image || !image.url) {
+    console.error('Invalid image selection');
+    return;
+  }
+  
+  const newImageData = {
+    ...selectedImage,
+    url: image.url,
+    name: type === 'original' ? selectedImage.name : `no-bg-${selectedImage.name}`
+  };
+  
+  setSelectedImage(newImageData);
+  
+  // If there's a composite image and we're selecting the background-removed version,
+  // update the composite image as well
+  if (compositeImage && type === 'removed' && selectedBackground) {
+    applyBackground(selectedBackground);
+  }
+  
+  // Update the original image reference for editing
+  const newImg = new Image();
+  newImg.onload = () => {
+    originalImageRef.current = newImg;
+  };
+  newImg.src = image.url;
+};
   return (
     <div className="app">
       {/* Sidebar */}
@@ -930,7 +966,7 @@ const selectImageFromComparison = (image, type) => {
                 Select Background
               </h3>
               {/* Comparison Section */}
-            {bgRemovedImage && originalImage && (
+            {/* {bgRemovedImage && originalImage && (
                 <div className="comparison-section">
                   <h4 className="comparison-title">Image Comparison</h4>
                   <div className="comparison-grid">
@@ -950,7 +986,28 @@ const selectImageFromComparison = (image, type) => {
                     </div>
                   </div>
                 </div>
-              )}
+              )} */}
+              {bgRemovedImage && originalImage && selectedImage && (
+      <div className="comparison-section">
+        <h4 className="comparison-title">Image Comparison</h4>
+        <div className="comparison-grid">
+          <div 
+            className={`comparison-item ${selectedImage.url === originalImage.url ? 'comparison-item-active' : ''}`}
+            onClick={() => selectImageFromComparison(originalImage, 'original')}
+          >
+            <img src={originalImage.url} alt="Original" />
+            <span>Original</span>
+          </div>
+          <div 
+            className={`comparison-item ${selectedImage.url === bgRemovedImage.url ? 'comparison-item-active' : ''}`}
+            onClick={() => selectImageFromComparison(bgRemovedImage, 'removed')}
+          >
+            <img src={bgRemovedImage.url} alt="Background Removed" />
+            <span>Background Removed</span>
+          </div>
+        </div>
+      </div>
+    )}
               
               <div className="backgrounds-grid">
                 {backgroundImages.map(bg => (
@@ -1079,7 +1136,7 @@ const selectImageFromComparison = (image, type) => {
                   <canvas ref={cropCanvasRef} className="hidden-canvas" />
                   
                   {/* Back to grid button */}
-                  <button
+                  {/* <button
                     onClick={() => {
                       setSelectedImage(null);
                       setIsEditing(false);
@@ -1088,7 +1145,22 @@ const selectImageFromComparison = (image, type) => {
                     className="back-button"
                   >
                     ← Back to Photos
-                  </button>
+                  </button> */}
+                  <button
+  onClick={() => {
+    setSelectedImage(null);
+    setIsEditing(false);
+    setIsCropping(false);
+    setShowBackgrounds(false); // Add this
+    setBgRemovedImage(null); // Add this
+    setCompositeImage(null); // Add this
+    setSelectedBackground(null); // Add this
+    setOriginalImage(null); // Add this
+  }}
+  className="back-button"
+>
+  ← Back to Photos
+</button>
                 </div>
               </div>
             )}
