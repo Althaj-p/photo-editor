@@ -87,6 +87,8 @@ const PhotoEditor = () => {
   const [showBackgrounds, setShowBackgrounds] = useState(false);
   const [selectedBackground, setSelectedBackground] = useState(null);
   const [compositeImage, setCompositeImage] = useState(null);
+  const [originalImage, setOriginalImage] = useState(null);
+const [showComparison, setShowComparison] = useState(false);
   
   const canvasRef = useRef(null);
   const originalImageRef = useRef(null);
@@ -229,6 +231,7 @@ const loadImagesFromFolder = async () => {
 // PicWash API integration
   const removeBackground = async () => {
     if (!selectedImage) return;
+    setOriginalImage(selectedImage);
     
     setIsRemovingBg(true);
     setBgRemoveProgress(0);
@@ -445,6 +448,13 @@ const loadImagesFromFolder = async () => {
     }));
   };
 
+  const showImageComparison = () => {
+    setShowComparison(true);
+  };
+  // Add a function to handle hiding comparison
+  const hideImageComparison = () => {
+    setShowComparison(false);
+  };
   // Save composite image
   const saveCompositeImage = () => {
     if (!compositeImage) return;
@@ -727,6 +737,44 @@ const loadImagesFromFolder = async () => {
     // { id: 'folders', label: 'Folders', icon: Folder }
   ];
 
+// Add this function to handle image selection from comparison
+// const selectImageFromComparison = (image, type) => {
+//   setSelectedImage({
+//     ...selectedImage,
+//     url: image.url,
+//     name: type === 'original' ? selectedImage.name : `no-bg-${selectedImage.name}`
+//   });
+  
+//   // Update the original image reference for editing
+//   const newImg = new Image();
+//   newImg.onload = () => {
+//     originalImageRef.current = newImg;
+//   };
+//   newImg.src = image.url;
+// };
+// Enhanced version that also handles composite images
+const selectImageFromComparison = (image, type) => {
+  const newImageData = {
+    ...selectedImage,
+    url: image.url,
+    name: type === 'original' ? selectedImage.name : `no-bg-${selectedImage.name}`
+  };
+  
+  setSelectedImage(newImageData);
+  
+  // If there's a composite image and we're selecting the background-removed version,
+  // update the composite image as well
+  if (compositeImage && type === 'removed' && selectedBackground) {
+    applyBackground(selectedBackground);
+  }
+  
+  // Update the original image reference for editing
+  const newImg = new Image();
+  newImg.onload = () => {
+    originalImageRef.current = newImg;
+  };
+  newImg.src = image.url;
+};
   return (
     <div className="app">
       {/* Sidebar */}
@@ -881,6 +929,28 @@ const loadImagesFromFolder = async () => {
                 <ImageIcon className="panel-icon" />
                 Select Background
               </h3>
+              {/* Comparison Section */}
+            {bgRemovedImage && originalImage && (
+                <div className="comparison-section">
+                  <h4 className="comparison-title">Image Comparison</h4>
+                  <div className="comparison-grid">
+                    <div 
+                      className={`comparison-item ${selectedImage.url === originalImage.url ? 'comparison-item-active' : ''}`}
+                      onClick={() => selectImageFromComparison(originalImage, 'original')}
+                    >
+                      <img src={originalImage.url} alt="Original" />
+                      <span>Original</span>
+                    </div>
+                    <div 
+                      className={`comparison-item ${selectedImage.url === bgRemovedImage.url ? 'comparison-item-active' : ''}`}
+                      onClick={() => selectImageFromComparison(bgRemovedImage, 'removed')}
+                    >
+                      <img src={bgRemovedImage.url} alt="Background Removed" />
+                      <span>Background Removed</span>
+                    </div>
+                  </div>
+                </div>
+              )}
               
               <div className="backgrounds-grid">
                 {backgroundImages.map(bg => (
