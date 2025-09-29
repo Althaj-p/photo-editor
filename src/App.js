@@ -430,9 +430,90 @@ const loadImagesFromFolder = async () => {
       console.error('Error saving image:', error);
     }
   };
-
+// Apply selected background and set up for future edits
+const applyBackground = async (background) => {
+  if (!bgRemovedImage || !bgRemovedImage.url || !background || !background.url) {
+    console.error('Invalid background application');
+    return;
+  }
+  
+  setSelectedBackground(background);
+  
+  // Create a canvas to composite the images
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  
+  // Load both images
+  const foreground = new Image();
+  const backgroundImg = new Image();
+  
+  foreground.crossOrigin = 'anonymous';
+  backgroundImg.crossOrigin = 'anonymous';
+  
+  // Wait for both images to load
+  await new Promise((resolve) => {
+    let loaded = 0;
+    const onLoad = () => {
+      loaded++;
+      if (loaded === 2) resolve();
+    };
+    
+    foreground.onload = onLoad;
+    backgroundImg.onload = onLoad;
+    
+    foreground.src = bgRemovedImage.url;
+    backgroundImg.src = background.url;
+  });
+  
+  // Set canvas dimensions to match background
+  canvas.width = backgroundImg.width;
+  canvas.height = backgroundImg.height;
+  
+  // Draw background
+  ctx.drawImage(backgroundImg, 0, 0, canvas.width, canvas.height);
+  
+  // Calculate dimensions for foreground to fit nicely
+  const maxWidth = canvas.width * 0.8;
+  const maxHeight = canvas.height * 0.8;
+  
+  let fgWidth = foreground.width;
+  let fgHeight = foreground.height;
+  
+  // Scale if necessary
+  if (fgWidth > maxWidth) {
+    const ratio = maxWidth / fgWidth;
+    fgWidth = maxWidth;
+    fgHeight = fgHeight * ratio;
+  }
+  
+  if (fgHeight > maxHeight) {
+    const ratio = maxHeight / fgHeight;
+    fgHeight = maxHeight;
+    fgWidth = fgWidth * ratio;
+  }
+  
+  // Center the foreground image
+  const x = (canvas.width - fgWidth) / 2;
+  const y = (canvas.height - fgHeight) / 2;
+  
+  // Draw foreground
+  ctx.drawImage(foreground, x, y, fgWidth, fgHeight);
+  
+  // Convert to data URL
+  const compositeUrl = canvas.toDataURL('image/png');
+  setCompositeImage(compositeUrl);
+  
+  // Update the displayed image - store the composite data for future reference
+  setSelectedImage(prev => ({ 
+    ...prev, 
+    url: compositeUrl,
+    compositeData: compositeUrl, // Store the composite data
+    backgroundApplied: true,
+    backgroundInfo: background
+  }));
+};
   // Apply selected background
-  const applyBackground = async (background) => {
+  const applyBackground1 = async (background) => {
     if (!bgRemovedImage || !bgRemovedImage.url || !background || !background.url) {
       console.error('Invalid background application');
       return;
@@ -575,9 +656,484 @@ const loadImagesFromFolder = async () => {
       grayscale: 0
     });
   };
+  // Unified save function that always creates composite from source images
+const saveImage = async () => {
+  if (!selectedImage) return;
+  
+  try {
+    console.log('Starting save process...');
+    
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    let filename;
+    
+    // Case 1: Composite image (background removed + custom background + edits)
+    if (bgRemovedImage && selectedBackground) {
+      console.log('Creating composite image with edits...');
+      
+      // Always create composite from source images to include edits
+      const foreground = new Image();
+      const backgroundImg = new Image();
+      
+      await new Promise((resolve) => {
+        let loaded = 0;
+        const onLoad = () => {
+          loaded++;
+          if (loaded === 2) resolve();
+        };
+        
+        foreground.onload = onLoad;
+        backgroundImg.onload = onLoad;
+        
+        // Use the background-removed image as foreground
+        foreground.src = bgRemovedImage.url;
+        backgroundImg.src = selectedBackground.url;
+      });
+      
+      // Set canvas to background dimensions
+      canvas.width = backgroundImg.width;
+      canvas.height = backgroundImg.height;
+      
+      // Draw background first
+      ctx.drawImage(backgroundImg, 0, 0, canvas.width, canvas.height);
+      
+      // Calculate dimensions for foreground
+      const maxWidth = canvas.width * 0.8;
+      const maxHeight = canvas.height * 0.8;
+      
+      let fgWidth = foreground.width;
+      let fgHeight = foreground.height;
+      
+      // Scale if necessary
+      if (fgWidth > maxWidth) {
+        const ratio = maxWidth / fgWidth;
+        fgWidth = maxWidth;
+        fgHeight = fgHeight * ratio;
+      }
+      
+      if (fgHeight > maxHeight) {
+        const ratio = maxHeight / fgHeight;
+        fgHeight = maxHeight;
+        fgWidth = fgWidth * ratio;
+      }
+      
+      // Center the foreground image
+      const x = (canvas.width - fgWidth) / 2;
+      const y = (canvas.height - fgHeight) / 2;
+      
+      // Apply edits to the ENTIRE composite image (background + foreground)
+      if (isEditing) {
+        ctx.filter = `
+          brightness(${editSettings.brightness}%)
+          contrast(${editSettings.contrast}%)
+          saturate(${editSettings.saturation}%)
+          hue-rotate(${editSettings.hue}deg)
+          blur(${editSettings.blur}px)
+          sepia(${editSettings.sepia}%)
+          grayscale(${editSettings.grayscale}%)
+        `;
+      }
+      
+      // Redraw the entire scene with filters applied
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(backgroundImg, 0, 0, canvas.width, canvas.height);
+      ctx.drawImage(foreground, x, y, fgWidth, fgHeight);
+      
+      filename = `composite-${selectedImage.name.replace('.png', '').replace('.jpg', '')}.png`;
+      
+    } 
+    // Case 2: Background removed only (no custom background) + edits
+    else if (bgRemovedImage && !selectedBackground) {
+      console.log('Saving background-removed image with edits...');
+      
+      const img = new Image();
+      await new Promise((resolve) => {
+        img.onload = resolve;
+        img.src = bgRemovedImage.url;
+      });
+      
+      canvas.width = img.width;
+      canvas.height = img.height;
+      
+      // Apply edits to background-removed image
+      if (isEditing) {
+        ctx.filter = `
+          brightness(${editSettings.brightness}%)
+          contrast(${editSettings.contrast}%)
+          saturate(${editSettings.saturation}%)
+          hue-rotate(${editSettings.hue}deg)
+          blur(${editSettings.blur}px)
+          sepia(${editSettings.sepia}%)
+          grayscale(${editSettings.grayscale}%)
+        `;
+      }
+      
+      ctx.drawImage(img, 0, 0);
+      filename = `no-bg-${selectedImage.name.replace('.png', '').replace('.jpg', '')}.png`;
+      
+    } 
+    // Case 3: Original image with edits
+    else {
+      console.log('Saving edited original image...');
+      
+      const img = originalImageRef.current;
+      if (!img) {
+        console.error('No image element found');
+        return;
+      }
+      
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      
+      // Apply edits if editing
+      if (isEditing) {
+        ctx.filter = `
+          brightness(${editSettings.brightness}%)
+          contrast(${editSettings.contrast}%)
+          saturate(${editSettings.saturation}%)
+          hue-rotate(${editSettings.hue}deg)
+          blur(${editSettings.blur}px)
+          sepia(${editSettings.sepia}%)
+          grayscale(${editSettings.grayscale}%)
+        `;
+      }
+      
+      // Draw the image
+      ctx.drawImage(img, 0, 0);
+      filename = `edited_${selectedImage.name}`;
+    }
+    
+    // Determine file format and quality
+    const isPNG = filename.toLowerCase().endsWith('.png');
+    const imageData = isPNG 
+      ? canvas.toDataURL('image/png')
+      : canvas.toDataURL('image/jpeg', 0.95);
+    
+    console.log('Attempting to save:', filename);
+    
+    // Use Electron API if available
+    if (window.require) {
+      try {
+        const { ipcRenderer } = window.require('electron');
+        const result = await ipcRenderer.invoke('image:save', imageData, filename);
+        if (result) {
+          console.log('✅ Image saved successfully:', result);
+          alert(`Image saved successfully as: ${filename}`);
+        } else {
+          console.log('Save cancelled by user');
+        }
+      } catch (error) {
+        console.error('❌ Electron save failed:', error);
+        downloadImage(imageData, filename);
+      }
+    } else {
+      downloadImage(imageData, filename);
+    }
+    
+  } catch (error) {
+    console.error('❌ Error in save process:', error);
+    alert('Error saving image: ' + error.message);
+  }
+};
+  // Save exactly what's displayed on screen
+const saveImage4 = async () => {
+  if (!selectedImage) return;
+  
+  try {
+    console.log('Starting save process...');
+    
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    let filename;
+    
+    // Get the currently displayed image from the preview
+    const previewImg = originalImageRef.current;
+    if (!previewImg) {
+      console.error('No preview image found');
+      return;
+    }
+    
+    // Set canvas to match preview dimensions
+    canvas.width = previewImg.naturalWidth || previewImg.width;
+    canvas.height = previewImg.naturalHeight || previewImg.height;
+    
+    // Apply the same filters that are currently on the preview
+    if (isEditing) {
+      ctx.filter = `
+        brightness(${editSettings.brightness}%)
+        contrast(${editSettings.contrast}%)
+        saturate(${editSettings.saturation}%)
+        hue-rotate(${editSettings.hue}deg)
+        blur(${editSettings.blur}px)
+        sepia(${editSettings.sepia}%)
+        grayscale(${editSettings.grayscale}%)
+      `;
+    }
+    
+    // Draw the current preview image (this includes any applied background)
+    ctx.drawImage(previewImg, 0, 0, canvas.width, canvas.height);
+    
+    // Determine filename based on current state
+    if (compositeImage && selectedBackground) {
+      filename = `composite-${selectedImage.name.replace('.png', '').replace('.jpg', '')}.png`;
+    } else if (bgRemovedImage && !selectedBackground) {
+      filename = `no-bg-${selectedImage.name.replace('.png', '').replace('.jpg', '')}.png`;
+    } else {
+      filename = `edited_${selectedImage.name}`;
+    }
+    
+    // Determine file format
+    const isPNG = filename.toLowerCase().endsWith('.png');
+    const imageData = isPNG 
+      ? canvas.toDataURL('image/png')
+      : canvas.toDataURL('image/jpeg', 0.95);
+    
+    console.log('Attempting to save:', filename);
+    
+    // Use Electron API if available
+    if (window.require) {
+      try {
+        const { ipcRenderer } = window.require('electron');
+        const result = await ipcRenderer.invoke('image:save', imageData, filename);
+        if (result) {
+          console.log('✅ Image saved successfully:', result);
+          alert(`Image saved successfully as: ${filename}`);
+        } else {
+          console.log('Save cancelled by user');
+        }
+      } catch (error) {
+        console.error('❌ Electron save failed:', error);
+        downloadImage(imageData, filename);
+      }
+    } else {
+      downloadImage(imageData, filename);
+    }
+    
+  } catch (error) {
+    console.error('❌ Error in save process:', error);
+    alert('Error saving image: ' + error.message);
+  }
+};
+// Update the preview whenever edits change
+useEffect(() => {
+  if (selectedImage && selectedBackground && bgRemovedImage && isEditing) {
+    updateCompositePreview();
+  }
+}, [editSettings, isEditing]);
+
+// Function to update composite preview with current edits
+const updateCompositePreview = async () => {
+  if (!bgRemovedImage || !selectedBackground) return;
+  
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  
+  const foreground = new Image();
+  const backgroundImg = new Image();
+  
+  await new Promise((resolve) => {
+    let loaded = 0;
+    const onLoad = () => {
+      loaded++;
+      if (loaded === 2) resolve();
+    };
+    
+    foreground.onload = onLoad;
+    backgroundImg.onload = onLoad;
+    
+    foreground.src = bgRemovedImage.url;
+    backgroundImg.src = selectedBackground.url;
+  });
+  
+  canvas.width = backgroundImg.width;
+  canvas.height = backgroundImg.height;
+  
+  // Draw background
+  ctx.drawImage(backgroundImg, 0, 0, canvas.width, canvas.height);
+  
+  const maxWidth = canvas.width * 0.8;
+  const maxHeight = canvas.height * 0.8;
+  
+  let fgWidth = foreground.width;
+  let fgHeight = foreground.height;
+  
+  if (fgWidth > maxWidth) {
+    const ratio = maxWidth / fgWidth;
+    fgWidth = maxWidth;
+    fgHeight = fgHeight * ratio;
+  }
+  
+  if (fgHeight > maxHeight) {
+    const ratio = maxHeight / fgHeight;
+    fgHeight = maxHeight;
+    fgWidth = fgWidth * ratio;
+  }
+  
+  const x = (canvas.width - fgWidth) / 2;
+  const y = (canvas.height - fgHeight) / 2;
+  
+  // Apply current edits
+  if (isEditing) {
+    ctx.filter = `
+      brightness(${editSettings.brightness}%)
+      contrast(${editSettings.contrast}%)
+      saturate(${editSettings.saturation}%)
+      hue-rotate(${editSettings.hue}deg)
+      blur(${editSettings.blur}px)
+      sepia(${editSettings.sepia}%)
+      grayscale(${editSettings.grayscale}%)
+    `;
+  }
+  
+  // Redraw with filters
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(backgroundImg, 0, 0, canvas.width, canvas.height);
+  ctx.drawImage(foreground, x, y, fgWidth, fgHeight);
+  
+  const updatedCompositeUrl = canvas.toDataURL('image/png');
+  setCompositeImage(updatedCompositeUrl);
+  
+  // Update the displayed image
+  setSelectedImage(prev => ({ 
+    ...prev, 
+    url: updatedCompositeUrl 
+  }));
+};
+  // Enhanced unified save function with better quality handling
+const saveImage3 = async () => {
+  if (!selectedImage) return;
+  
+  try {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    let filename;
+    
+    if (compositeImage && selectedBackground) {
+      // Handle composite image - create from scratch for best quality
+      const foreground = new Image();
+      const backgroundImg = new Image();
+      
+      await new Promise((resolve) => {
+        let loaded = 0;
+        const onLoad = () => {
+          loaded++;
+          if (loaded === 2) resolve();
+        };
+        
+        foreground.onload = onLoad;
+        backgroundImg.onload = onLoad;
+        
+        foreground.src = bgRemovedImage.url;
+        backgroundImg.src = selectedBackground.url;
+      });
+      
+      // Set canvas to background dimensions
+      canvas.width = backgroundImg.width;
+      canvas.height = backgroundImg.height;
+      
+      // Draw background
+      ctx.drawImage(backgroundImg, 0, 0, canvas.width, canvas.height);
+      
+      // Calculate dimensions for foreground
+      const maxWidth = canvas.width * 0.8;
+      const maxHeight = canvas.height * 0.8;
+      
+      let fgWidth = foreground.width;
+      let fgHeight = foreground.height;
+      
+      // Scale if necessary
+      if (fgWidth > maxWidth) {
+        const ratio = maxWidth / fgWidth;
+        fgWidth = maxWidth;
+        fgHeight = fgHeight * ratio;
+      }
+      
+      if (fgHeight > maxHeight) {
+        const ratio = maxHeight / fgHeight;
+        fgHeight = maxHeight;
+        fgWidth = fgWidth * ratio;
+      }
+      
+      // Center the foreground image
+      const x = (canvas.width - fgWidth) / 2;
+      const y = (canvas.height - fgHeight) / 2;
+      
+      // Draw foreground
+      ctx.drawImage(foreground, x, y, fgWidth, fgHeight);
+      
+      filename = `composite-${selectedImage.name.replace('.png', '').replace('.jpg', '')}.png`;
+      
+    } else if (bgRemovedImage && !selectedBackground) {
+      // Handle background-removed image
+      const img = new Image();
+      await new Promise((resolve) => {
+        img.onload = resolve;
+        img.src = bgRemovedImage.url;
+      });
+      
+      canvas.width = img.width;
+      canvas.height = img.height;
+      ctx.drawImage(img, 0, 0);
+      
+      filename = `no-bg-${selectedImage.name.replace('.png', '').replace('.jpg', '')}.png`;
+      
+    } else {
+      // Handle edited original image
+      const img = originalImageRef.current;
+      if (!img) return;
+      
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      
+      // Apply current edits
+      if (isEditing) {
+        ctx.filter = `
+          brightness(${editSettings.brightness}%)
+          contrast(${editSettings.contrast}%)
+          saturate(${editSettings.saturation}%)
+          hue-rotate(${editSettings.hue}deg)
+          blur(${editSettings.blur}px)
+          sepia(${editSettings.sepia}%)
+          grayscale(${editSettings.grayscale}%)
+        `;
+      }
+      
+      ctx.drawImage(img, 0, 0);
+      filename = `edited_${selectedImage.name}`;
+    }
+    
+    // Determine file format and quality
+    const isPNG = filename.toLowerCase().endsWith('.png');
+    const imageData = isPNG 
+      ? canvas.toDataURL('image/png')
+      : canvas.toDataURL('image/jpeg', 0.95);
+    
+    // Save the image
+    if (window.require) {
+      const { ipcRenderer } = window.require('electron');
+      const result = await ipcRenderer.invoke('image:save', imageData, filename);
+      if (result) {
+        console.log('Image saved to:', result);
+        alert(`Image saved successfully as: ${filename}`);
+      }
+    } else {
+      const link = document.createElement('a');
+      link.download = filename;
+      link.href = imageData;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      console.log('Image downloaded:', filename);
+    }
+    
+  } catch (error) {
+    console.error('Error saving image:', error);
+    alert('Error saving image: ' + error.message);
+  }
+};
 
   // Save edited image
-  const saveImage = () => {
+  const saveImageold = () => {
     if (!selectedImage) return;
     
     // Create a temporary canvas to draw the final image
@@ -959,7 +1515,7 @@ const selectImageFromComparison2 = (image, type) => {
               )}
               
               {/* Add Save Composite button */}
-              {compositeImage && (
+              {/* {compositeImage && (
                 <button
                   onClick={saveCompositeImage}
                   className="control-button save-button"
@@ -967,7 +1523,7 @@ const selectImageFromComparison2 = (image, type) => {
                   <Save className="control-icon" />
                   Save Composite
                 </button>
-              )}
+              )} */}
               <button
                 onClick={() => {
                   setIsCropping(!isCropping);
@@ -1002,11 +1558,19 @@ const selectImageFromComparison2 = (image, type) => {
                 {/* <RotateCcw className="control-icon" /> */}
                 Reset
               </button>
-              <button
+              {/* <button
                 onClick={saveImage}
                 className="control-button save-button"
               >
-                {/* <Download className="control-icon" /> */}
+                <Download className="control-icon" />
+                Save
+              </button> */}
+              <button
+                onClick={saveImage}
+                className="control-button save-button"
+                title="Save final image (includes all edits, background removal, and applied backgrounds)"
+              >
+                <Download className="control-icon" />
                 Save
               </button>
             </div>
