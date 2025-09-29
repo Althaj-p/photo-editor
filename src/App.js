@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Camera, Grid, Edit3, Crop, Printer, RotateCcw, Download, Folder, Wand2, Image as ImageIcon, Save } from 'lucide-react';
+import { Camera, Grid, Edit3, Crop, Printer, RotateCcw, Download, Folder, Wand2, Image as ImageIcon, Save, FolderOpen } from 'lucide-react';
 // Automatically import all images from src/assets/images
 const importAll = (r) => {
   return r.keys().map((file, index) => ({
@@ -58,6 +58,7 @@ const PhotoEditor = () => {
   const [selectedImage, setSelectedImage] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
   const [isCropping, setIsCropping] = useState(false);
+  const [selectedFolder, setSelectedFolder] = useState('');
   const [editSettings, setEditSettings] = useState({
     brightness: 100,
     contrast: 100,
@@ -132,6 +133,97 @@ const PhotoEditor = () => {
     { label: '3:2', value: '3:2' },
     { label: '5:4', value: '5:4' }
   ];
+// Alternative method using the legacy handler
+const loadImagesFromFolder = async () => {
+  try {
+    if (window.require) {
+      const { ipcRenderer } = window.require('electron');
+      
+      // Use the legacy handler that's already defined in your main.js
+      const result = await ipcRenderer.invoke('select-folder');
+      
+      if (result) {
+        console.log('Selected folder:', result.folderPath);
+        console.log('Loaded images:', result.images);
+        
+        setImages(result.images);
+        setSelectedFolder(result.folderPath);
+        setSelectedImage(null);
+      }
+    } else {
+      console.warn('Electron not available - running in browser mode');
+      // ... browser fallback code ...
+    }
+  } catch (error) {
+    console.error('Error loading images:', error);
+    alert('Error loading images from folder: ' + error.message);
+  }
+};
+
+  // Load recent folder on app start
+  useEffect(() => {
+    const loadRecentFolder = async () => {
+      if (window.require) {
+        try {
+          const { ipcRenderer } = window.require('electron');
+          const recentFolder = await ipcRenderer.invoke('folder:getRecent');
+          if (recentFolder) {
+            const imageFiles = await ipcRenderer.invoke('folder:readImages', recentFolder);
+            setImages(imageFiles);
+            setSelectedFolder(recentFolder);
+          }
+        } catch (error) {
+          console.log('No recent folder found:', error);
+        }
+      }
+    };
+
+    loadRecentFolder();
+  }, []);
+
+  // Save image using Electron API
+  const saveImage2 = async () => {
+    if (!selectedImage) return;
+    
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    const img = originalImageRef.current;
+    
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    
+    if (isEditing) {
+      ctx.filter = `
+        brightness(${editSettings.brightness}%)
+        contrast(${editSettings.contrast}%)
+        saturate(${editSettings.saturation}%)
+        hue-rotate(${editSettings.hue}deg)
+        blur(${editSettings.blur}px)
+        sepia(${editSettings.sepia}%)
+        grayscale(${editSettings.grayscale}%)
+      `;
+    }
+    
+    ctx.drawImage(img, 0, 0);
+    
+    try {
+      if (window.require) {
+        const { ipcRenderer } = window.require('electron');
+        const imageDataUrl = canvas.toDataURL('image/jpeg', 0.95);
+        await ipcRenderer.invoke('image:save', imageDataUrl, `edited_${selectedImage.name}`);
+      } else {
+        // Browser fallback
+        const link = document.createElement('a');
+        link.download = `edited_${selectedImage.name}`;
+        link.href = canvas.toDataURL('image/jpeg', 0.95);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+    } catch (error) {
+      console.error('Error saving image:', error);
+    }
+  };
 
    // PicWash API integration
 // PicWash API integration
@@ -631,8 +723,8 @@ const PhotoEditor = () => {
   }, [isCropping, isDragging, dragType, dragStart, cropSettings]);
 
   const sidebarItems = [
-    { id: 'all-photos', label: 'All Photos', icon: Grid },
-    { id: 'folders', label: 'Folders', icon: Folder }
+    // { id: 'all-photos', label: 'All Photos', icon: Grid },
+    // { id: 'folders', label: 'Folders', icon: Folder }
   ];
 
   return (
@@ -666,7 +758,7 @@ const PhotoEditor = () => {
             })}
           </ul>
           
-          <div className="external-folder-section">
+          {/* <div className="external-folder-section">
             <button
               onClick={() => alert('Folder loading functionality would be implemented here')}
               className="folder-button"
@@ -674,7 +766,21 @@ const PhotoEditor = () => {
               <Folder className="folder-icon" />
               Load External Folder
             </button>
-          </div>
+          </div> */}
+          <div className="external-folder-section">
+  <button
+    onClick={loadImagesFromFolder}
+    className="folder-button"
+  >
+    <FolderOpen className="folder-icon" />
+    Choose Folder
+  </button>
+  {selectedFolder && (
+    <p className="selected-folder">
+      Current: {selectedFolder.split(/[\\/]/).pop()}
+    </p>
+  )}
+</div>
         </nav>
       </div>
 
