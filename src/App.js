@@ -88,7 +88,9 @@ const PhotoEditor = () => {
   const [selectedBackground, setSelectedBackground] = useState(null);
   const [compositeImage, setCompositeImage] = useState(null);
   const [originalImage, setOriginalImage] = useState(null);
-const [showComparison, setShowComparison] = useState(false);
+  const [showComparison, setShowComparison] = useState(false);
+  const [customBackgrounds, setCustomBackgrounds] = useState([]);
+  const [selectedBackgroundFolder, setSelectedBackgroundFolder] = useState('');
   
   const canvasRef = useRef(null);
   const originalImageRef = useRef(null);
@@ -134,6 +136,58 @@ const [showComparison, setShowComparison] = useState(false);
     { label: '16:9', value: '16:9' },
     { label: '3:2', value: '3:2' },
     { label: '5:4', value: '5:4' }
+  ];
+  // Function to load background images from folder
+  const loadBackgroundsFromFolder = async () => {
+    try {
+      if (window.require) {
+        const { ipcRenderer } = window.require('electron');
+        
+        // Use the same handler as main images
+        const result = await ipcRenderer.invoke('select-folder');
+        
+        if (result && result.images) {
+          console.log('Selected background folder:', result.folderPath);
+          console.log('Loaded background images:', result.images);
+          
+          setCustomBackgrounds(result.images);
+          setSelectedBackgroundFolder(result.folderPath);
+        }
+      } else {
+        console.warn('Electron not available - running in browser mode');
+        // Browser fallback for background images
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.webkitdirectory = true;
+        input.multiple = true;
+        input.accept = 'image/*';
+        
+        input.onchange = (e) => {
+          const files = Array.from(e.target.files);
+          const backgroundFiles = files
+            .filter(file => file.type.startsWith('image/'))
+            .map((file, index) => ({
+              id: index + 1000, // Start from 1000 to avoid conflicts with main images
+              name: file.name,
+              url: URL.createObjectURL(file),
+              file: file
+            }));
+          
+          setCustomBackgrounds(backgroundFiles);
+          setSelectedBackgroundFolder('Selected Folder');
+        };
+        
+        input.click();
+      }
+    } catch (error) {
+      console.error('Error loading background images:', error);
+      alert('Error loading background images from folder: ' + error.message);
+    }
+  };
+  // Combine default backgrounds with custom backgrounds
+  const allBackgrounds = [
+    ...backgroundImages, // Your existing default backgrounds
+    ...customBackgrounds // Custom backgrounds from computer
   ];
 // Alternative method using the legacy handler
 const loadImagesFromFolder = async () => {
@@ -259,7 +313,8 @@ const loadImagesFromFolder = async () => {
       const createTaskResponse = await fetch('https://techhk.aoscdn.com/api/tasks/visual/segmentation', {
         method: 'POST',
         headers: {
-          'X-API-KEY': 'wxa8nbct595p2r0x5',
+          // 'X-API-KEY': 'wxa8nbct595p2r0x5',
+          'X-API-KEY': 'wxx4yws6eibe485sq',
         },
         body: formData
       });
@@ -288,7 +343,8 @@ const loadImagesFromFolder = async () => {
         try {
           const resultResponse = await fetch(`https://techhk.aoscdn.com/api/tasks/visual/segmentation/${taskId}`, {
             headers: {
-              'X-API-KEY': 'wxa8nbct595p2r0x5',
+              // 'X-API-KEY': 'wxa8nbct595p2r0x5',
+              'X-API-KEY': 'wxx4yws6eibe485sq',
             }
           });
           
@@ -943,14 +999,14 @@ const selectImageFromComparison2 = (image, type) => {
                 onClick={resetFilters}
                 className="control-button reset-button"
               >
-                <RotateCcw className="control-icon" />
+                {/* <RotateCcw className="control-icon" /> */}
                 Reset
               </button>
               <button
                 onClick={saveImage}
                 className="control-button save-button"
               >
-                <Download className="control-icon" />
+                {/* <Download className="control-icon" /> */}
                 Save
               </button>
             </div>
@@ -961,10 +1017,27 @@ const selectImageFromComparison2 = (image, type) => {
           {/* Background Selection Panel */}
           {showBackgrounds && (
             <div className="backgrounds-panel">
-              <h3 className="panel-title">
-                <ImageIcon className="panel-icon" />
-                Select Background
-              </h3>
+              <div className="backgrounds-panel-header">
+                <h3 className="panel-title">
+                  <ImageIcon className="panel-icon" />
+                  Select Background
+                </h3>
+                {/* Add button to load custom backgrounds */}
+                <button
+                  onClick={loadBackgroundsFromFolder}
+                  className="folder-button small"
+                >
+                  <FolderOpen className="folder-icon" />
+                  Add Custom Backgrounds
+                </button>
+              </div>
+              {/* Show selected background folder */}
+            {selectedBackgroundFolder && (
+              <div className="selected-folder-info">
+                <p>Custom backgrounds from: {selectedBackgroundFolder.split(/[\\/]/).pop()}</p>
+                <p>{customBackgrounds.length} custom background(s) loaded</p>
+              </div>
+            )}
               {/* Comparison Section */}
             {/* {bgRemovedImage && originalImage && (
                 <div className="comparison-section">
@@ -1009,7 +1082,7 @@ const selectImageFromComparison2 = (image, type) => {
       </div>
     )}
               
-              <div className="backgrounds-grid">
+              {/* <div className="backgrounds-grid">
                 {backgroundImages.map(bg => (
                   <div
                     key={bg.id}
@@ -1020,7 +1093,77 @@ const selectImageFromComparison2 = (image, type) => {
                     <span>{bg.name}</span>
                   </div>
                 ))}
+              </div> */}
+              {/* Backgrounds Grid - Now using combined backgrounds */}
+            <div className="backgrounds-grid">
+              {/* Default Backgrounds Section */}
+              {customBackgrounds.length === 0 && (
+                <div className="backgrounds-section">
+                  <h4 className="backgrounds-section-title">Default Backgrounds</h4>
+                  <div className="backgrounds-grid-inner">
+                    {backgroundImages.map(bg => (
+                      <div
+                        key={bg.id}
+                        className={`background-item ${selectedBackground?.id === bg.id ? 'background-item-active' : ''}`}
+                        onClick={() => applyBackground(bg)}
+                      >
+                        <img src={bg.url} alt={bg.name} />
+                        <span>{bg.name}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Combined Backgrounds when custom backgrounds are loaded */}
+              {customBackgrounds.length > 0 && (
+                <>
+                  {/* Default Backgrounds */}
+                  <div className="backgrounds-section">
+                    <h4 className="backgrounds-section-title">Default Backgrounds</h4>
+                    <div className="backgrounds-grid-inner">
+                      {backgroundImages.map(bg => (
+                        <div
+                          key={bg.id}
+                          className={`background-item ${selectedBackground?.id === bg.id ? 'background-item-active' : ''}`}
+                          onClick={() => applyBackground(bg)}
+                        >
+                          <img src={bg.url} alt={bg.name} />
+                          <span>{bg.name}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Custom Backgrounds */}
+                  <div className="backgrounds-section">
+                    <h4 className="backgrounds-section-title">
+                      Custom Backgrounds 
+                      <span className="backgrounds-count">({customBackgrounds.length})</span>
+                    </h4>
+                    <div className="backgrounds-grid-inner">
+                      {customBackgrounds.map(bg => (
+                        <div
+                          key={bg.id}
+                          className={`background-item ${selectedBackground?.id === bg.id ? 'background-item-active' : ''}`}
+                          onClick={() => applyBackground(bg)}
+                        >
+                          <img src={bg.url} alt={bg.name} />
+                          <span className="background-name">{bg.name}</span>
+                          <span className="background-type">Custom</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+            {customBackgrounds.length === 0 && (
+              <div className="empty-backgrounds-state">
+                <p>No custom backgrounds loaded yet.</p>
+                <p>Click "Add Custom Backgrounds" to select a folder with your own background images.</p>
               </div>
+            )}
             </div>
           )}
           {/* Image Grid */}
