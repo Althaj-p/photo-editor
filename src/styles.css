@@ -894,6 +894,28 @@ body {
 
 .backgrounds-section {
   margin-bottom: 24px;
+  max-height: 400px;
+  overflow-y: auto;
+  padding-right: 8px;
+}
+
+/* Custom scrollbar for backgrounds section */
+.backgrounds-section::-webkit-scrollbar {
+  width: 8px;
+}
+
+.backgrounds-section::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+.backgrounds-section::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 4px;
+}
+
+.backgrounds-section::-webkit-scrollbar-thumb:hover {
+  background: #555;
 }
 
 .backgrounds-section-title {
@@ -904,6 +926,11 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
+  position: sticky;
+  top: 0;
+  background: white;
+  padding: 8px 0;
+  z-index: 1;
 }
 
 .backgrounds-count {
@@ -918,8 +945,8 @@ body {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
   gap: 12px;
+  padding-bottom: 12px;
 }
-
 .background-item {
   border: 2px solid #e5e7eb;
   border-radius: 8px;
