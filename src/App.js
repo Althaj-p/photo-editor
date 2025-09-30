@@ -1171,7 +1171,153 @@ const saveImage3 = async () => {
   };
 
   // Print image
-  const printImage = () => {
+  // Print image - Fixed for Electron
+const printImage = async () => {
+  if (!selectedImage) return;
+  
+  try {
+    // Check if running in Electron
+    if (window.require) {
+      const { ipcRenderer } = window.require('electron');
+      
+      // Create a temporary canvas with the current image state
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      const img = originalImageRef.current;
+      
+      if (!img) return;
+      
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      
+      // Apply current filters if editing
+      if (isEditing) {
+        ctx.filter = `
+          brightness(${editSettings.brightness}%)
+          contrast(${editSettings.contrast}%)
+          saturate(${editSettings.saturation}%)
+          hue-rotate(${editSettings.hue}deg)
+          blur(${editSettings.blur}px)
+          sepia(${editSettings.sepia}%)
+          grayscale(${editSettings.grayscale}%)
+        `;
+      }
+      
+      ctx.drawImage(img, 0, 0);
+      
+      // Convert to data URL
+      const imageDataUrl = canvas.toDataURL('image/jpeg', 0.95);
+      
+      // Create a new window for printing
+      const printWindow = window.open('', '_blank', 'width=800,height=600');
+      
+      if (printWindow) {
+        printWindow.document.write(`
+          <!DOCTYPE html>
+          <html>
+            <head>
+              <title>Print Photo - ${selectedImage.name}</title>
+              <style>
+                * {
+                  margin: 0;
+                  padding: 0;
+                  box-sizing: border-box;
+                }
+                body {
+                  display: flex;
+                  justify-content: center;
+                  align-items: center;
+                  min-height: 100vh;
+                  background: #f0f0f0;
+                }
+                img {
+                  max-width: 100%;
+                  max-height: 100vh;
+                  object-fit: contain;
+                  display: block;
+                }
+                @media print {
+                  body {
+                    background: white;
+                    margin: 0;
+                  }
+                  img {
+                    max-width: 100%;
+                    max-height: 100vh;
+                    page-break-inside: avoid;
+                  }
+                  @page {
+                    margin: 0.5cm;
+                  }
+                }
+              </style>
+            </head>
+            <body>
+              <img src="${imageDataUrl}" alt="${selectedImage.name}" />
+              <script>
+                // Wait for image to load, then print
+                window.onload = function() {
+                  const img = document.querySelector('img');
+                  if (img.complete) {
+                    setTimeout(() => {
+                      window.print();
+                    }, 500);
+                  } else {
+                    img.onload = function() {
+                      setTimeout(() => {
+                        window.print();
+                      }, 500);
+                    };
+                  }
+                };
+                
+                // Close window after printing or canceling
+                window.onafterprint = function() {
+                  setTimeout(() => {
+                    window.close();
+                  }, 100);
+                };
+              </script>
+            </body>
+          </html>
+        `);
+        printWindow.document.close();
+      }
+    } else {
+      // Browser fallback - original method
+      const printWindow = window.open('', '_blank');
+      printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Print Photo</title>
+            <style>
+              body { margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+              img { max-width: 100%; max-height: 100vh; object-fit: contain; }
+              @media print {
+                body { margin: 0; }
+                img { max-width: 100%; max-height: 100vh; }
+              }
+            </style>
+          </head>
+          <body>
+            <img src="${selectedImage.url}" alt="${selectedImage.name}" />
+            <script>
+              window.onload = function() {
+                setTimeout(() => window.print(), 500);
+              };
+            </script>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+    }
+  } catch (error) {
+    console.error('Error printing image:', error);
+    alert('Error printing image: ' + error.message);
+  }
+};
+  const printImage0 = () => {
     if (!selectedImage) return;
     
     const printWindow = window.open('', '_blank');
