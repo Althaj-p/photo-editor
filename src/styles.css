@@ -1063,3 +1063,56 @@ body {
   font-weight: 500;
   color: #374151;
 }
+
+.transform-section {
+  margin-bottom: 20px;
+  padding: 16px;
+  background: #f8fafc;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+}
+
+.transform-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 12px;
+}
+
+.transform-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.transform-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.transform-reset-button {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  background-color: #6b7280;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.transform-reset-button:hover {
+  background-color: #4b5563;
+}
+
+.transform-tips {
+  font-size: 11px;
+  color: #6b7280;
+  text-align: center;
+}
+
+.transform-tips p {
+  margin: 2px 0;
+}
